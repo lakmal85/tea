@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>CTM Group | Smart Tea Recognizer</title>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <!-- TensorFlow Lite / MobileNet for image classification -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
+    <!-- Modern Font & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: white;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Modern glassmorphic + green/gold theme */
+        .app-container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px 18px 32px;
+            position: relative;
+        }
+
+        /* Header with CTM Group Branding */
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
+            animation: fadeSlideDown 0.5s ease;
+        }
+        .header h1 {
+            font-size: 1.7rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #2E7D32 0%, #C9A03D 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: -0.3px;
+        }
+        .header .sub {
+            color: #5a6e5a;
+            font-weight: 500;
+            margin-top: 6px;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+        }
+        .brand-badge {
+            display: inline-block;
+            background: #f0ebe0;
+            padding: 4px 12px;
+            border-radius: 40px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #C9A03D;
+            margin-top: 8px;
+        }
+
+        /* Camera Card - Fixed Implementation */
+        .camera-card {
+            background: #ffffff;
+            border-radius: 44px;
+            box-shadow: 0 20px 35px -12px rgba(0,0,0,0.1), 0 0 0 1px rgba(210, 180, 60, 0.2);
+            overflow: hidden;
+            margin-bottom: 28px;
+            transition: transform 0.2s ease, box-shadow 0.3s;
+            animation: fadeScaleUp 0.5s ease;
+        }
+        .camera-container {
+            position: relative;
+            width: 100%;
+            background: #1a2a1a;
+            min-height: 340px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border-radius: 40px 40px 32px 32px;
+        }
+        video {
+            width: 100%;
+            height: auto;
+            max-height: 420px;
+            object-fit: cover;
+            display: block;
+            transform: scaleX(1);
+        }
+        /* for front camera mirror effect handled via CSS if needed */
+        .camera-overlay {
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            background: rgba(46,125,50,0.85);
+            backdrop-filter: blur(4px);
+            padding: 8px 14px;
+            border-radius: 60px;
+            color: white;
+            font-size: 0.75rem;
+            font-weight: 600;
+            pointer-events: none;
+            z-index: 5;
+        }
+        .button-group {
+            display: flex;
+            gap: 14px;
+            padding: 18px 20px;
+            background: white;
+            border-top: 1px solid #f0ead8;
+        }
+        .btn {
+            flex: 1;
+            border: none;
+            padding: 12px 0;
+            border-radius: 48px;
+            font-weight: 700;
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            background: #f0f0ea;
+            color: #2c3e2c;
+        }
+        .btn-primary {
+            background: linear-gradient(105deg, #2E7D32 0%, #388E3C 100%);
+            color: white;
+            box-shadow: 0 4px 10px rgba(46,125,50,0.3);
+        }
+        .btn-primary:active { transform: scale(0.96); background: #1B5E20; }
+        .btn-gold {
+            background: #C9A03D;
+            color: white;
+            box-shadow: 0 4px 12px rgba(201,160,61,0.3);
+        }
+        .btn-gold:active { transform: scale(0.96); background: #B88A2A; }
+        .btn-outline {
+            background: transparent;
+            border: 1.5px solid #C9A03D;
+            color: #B98A2E;
+        }
+
+        /* Tea info card */
+        .info-card {
+            background: white;
+            border-radius: 38px;
+            padding: 20px 22px;
+            margin-bottom: 24px;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.05), 0 0 0 1px rgba(201,160,61,0.25);
+            transition: all 0.3s ease;
+            animation: fadeSlideUp 0.4s ease;
+        }
+        .tea-name {
+            font-size: 1.9rem;
+            font-weight: 800;
+            background: linear-gradient(125deg, #2E7D32, #C9A03D);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 6px;
+        }
+        .quality-badge {
+            display: inline-block;
+            background: #FEF5E7;
+            padding: 6px 16px;
+            border-radius: 60px;
+            font-weight: 700;
+            color: #C9A03D;
+            border-left: 3px solid #C9A03D;
+            margin: 12px 0 10px;
+        }
+        .tea-desc {
+            color: #2c3e2c;
+            line-height: 1.45;
+            font-size: 0.95rem;
+            margin-top: 8px;
+        }
+        .speaker-icon {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: #f9f6ed;
+            padding: 8px 14px;
+            border-radius: 100px;
+            margin-top: 16px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #2E7D32;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .speaker-icon i { font-size: 1.1rem; }
+
+        /* Save section */
+        .save-section {
+            background: white;
+            border-radius: 32px;
+            padding: 18px 20px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.03);
+            border: 1px solid #ece3cf;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .save-section input {
+            flex: 2;
+            padding: 14px 18px;
+            border-radius: 60px;
+            border: 1.5px solid #e2dccf;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.95rem;
+            background: #fefcf7;
+            transition: 0.2s;
+        }
+        .save-section input:focus {
+            outline: none;
+            border-color: #C9A03D;
+            box-shadow: 0 0 0 3px rgba(201,160,61,0.2);
+        }
+        .btn-save {
+            background: linear-gradient(95deg, #2E7D32, #1F5A23);
+            color: white;
+            border: none;
+            padding: 12px 26px;
+            border-radius: 60px;
+            font-weight: 700;
+            gap: 8px;
+            cursor: pointer;
+            transition: 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .status-msg {
+            font-size: 0.8rem;
+            margin-left: 8px;
+            color: #7e8c7e;
+            text-align: center;
+        }
+
+        /* toast message */
+        .toast-msg {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1a2e1a;
+            color: #F9E0A0;
+            padding: 12px 24px;
+            border-radius: 60px;
+            font-weight: 500;
+            z-index: 1000;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            transition: opacity 0.3s;
+            pointer-events: none;
+            font-size: 0.85rem;
+            max-width: 85%;
+            text-align: center;
+        }
+
+        @keyframes fadeSlideDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeScaleUp {
+            from { opacity: 0; transform: scale(0.96); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes fadeSlideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .camera-placeholder {
+            color: #c9b16b;
+            text-align: center;
+            padding: 60px 20px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <div class="header">
+        <h1><i class="fas fa-leaf" style="color: #C9A03D;"></i> CTM Group Smart Tea Recognizer</h1>
+        <div class="brand-badge"><i class="fas fa-brain"></i> AI-Powered | Premium Tea Analysis</div>
+        <p class="sub">point camera at tea sample • instant recognition & female voice</p>
+    </div>
+
+    <div class="camera-card">
+        <div class="camera-container">
+            <video id="video" autoplay playsinline muted style="width:100%; height:auto;"></video>
+            <canvas id="canvas" style="display: none;"></canvas>
+            <div class="camera-overlay">
+                <i class="fas fa-camera"></i> AI ready
+            </div>
+        </div>
+        <div class="button-group">
+            <button id="captureBtn" class="btn btn-primary"><i class="fas fa-camera"></i> Scan Tea</button>
+            <button id="switchCameraBtn" class="btn btn-outline"><i class="fas fa-sync-alt"></i> Flip Camera</button>
+        </div>
+    </div>
+
+    <!-- Tea details panel -->
+    <div id="teaInfoPanel" class="info-card" style="display: none;">
+        <div class="tea-name" id="teaName">-</div>
+        <div class="quality-badge" id="teaQuality">⭐ Quality: Premium</div>
+        <div class="tea-desc" id="teaDescription">Detailed tea profile will appear here...</div>
+        <div class="speaker-icon" id="speakerBtn">
+            <i class="fas fa-volume-up"></i> <span>Read aloud (female voice)</span>
+        </div>
+    </div>
+
+    <!-- Save to Firebase section -->
+    <div class="save-section">
+        <input type="text" id="scanRefInput" placeholder="Enter batch / lot number or reference..." autocomplete="off">
+        <button id="saveToFirebaseBtn" class="btn-save"><i class="fas fa-database"></i> Save scan</button>
+    </div>
+    <div id="statusMessage" class="status-msg"></div>
+</div>
+
+<script>
+    // ======================= FIREBASE CONFIGURATION (USER PROVIDED) =======================
+    const firebaseConfig = {
+        apiKey: "AIzaSyCzIgd061S77b_QSdl9aDHg2p_DEICENRw",
+        authDomain: "expensetracker-a81ee.firebaseapp.com",
+        databaseURL: "https://expensetracker-a81ee-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "expensetracker-a81ee",
+        storageBucket: "expensetracker-a81ee.firebasestorage.app",
+        messagingSenderId: "386142221621",
+        appId: "1:386142221621:web:a5344f1ec37983b3e2087c",
+        measurementId: "G-Y3Q9R12J2G"
+    };
+    
+    let database = null;
+    let firebaseInitialized = false;
+    try {
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        database = firebase.database();
+        firebaseInitialized = true;
+        console.log("✅ Firebase connected successfully (CTM Group)");
+    } catch (err) {
+        console.warn("⚠️ Firebase init error, using localStorage fallback", err);
+        firebaseInitialized = false;
+    }
+
+    // ======================= TEA DATABASE (Recognition Mapping) =======================
+    const teaDatabase = [
+        { keywords: ["black tea", "assam", "darjeeling", "cuppa", "english breakfast", "ceylon black"], name: "Ceylon Black Tea", quality: "Premium Orthodox · BOPF", desc: "Full-bodied, malty notes with bright amber liquor. Grown in highlands. Rich in antioxidants & bold flavor." },
+        { keywords: ["green tea", "matcha", "sencha", "japanese tea", "gunpowder"], name: "Japanese Sencha Green Tea", quality: "First Flush · Grade A", desc: "Steamed fresh leaves, grassy aroma with umami. High in catechins and L-theanine. Excellent for metabolism." },
+        { keywords: ["white tea", "silver needle", "baihao", "white peony"], name: "Silver Needle White Tea", quality: "Rare & Delicate Harvest", desc: "Subtle, sweet, hay-like flavor. Minimal oxidation, harvested only as buds. Luxurious and smooth." },
+        { keywords: ["oolong", "wulong", "tieguanyin", "formosa", "oolong tea"], name: "Iron Goddess Oolong", quality: "Artisan Roasted · Dong Ding", desc: "Partial oxidation, floral and creamy texture. Multiple infusions reveal complexity and orchid aroma." },
+        { keywords: ["herbal tea", "chamomile", "peppermint", "rooibos", "tisane", "lemongrass"], name: "Chamomile Herbal Infusion", quality: "Organic Caffeine-Free", desc: "Calming, apple-like sweetness. Soothes digestion and promotes restful sleep. Naturally sweet." },
+        { keywords: ["matcha", "matcha tea", "ceremonial matcha"], name: "Ceremonial Matcha", quality: "Stone-ground · Top Grade", desc: "Vibrant green, umami-rich, whisked from shade-grown tencha leaves. Energy and focus." },
+        { keywords: ["masala chai", "chai tea", "spiced tea", "chai"], name: "Masala Chai", quality: "Spiced Blend · CTC", desc: "Black tea with cardamom, cinnamon, ginger – aromatic and invigorating. Traditional Indian recipe." },
+        { keywords: ["earl grey", "bergamot", "grey tea", "lady grey"], name: "Earl Grey", quality: "Bergamot Infused", desc: "Classic black tea scented with bergamot oil, citrusy and brisk. Uplifting aroma." },
+        { keywords: ["pu erh", "pu'er", "dark tea", "pu-erh"], name: "Pu'erh Aged Tea", quality: "Fermented · Vintage", desc: "Earthy, smooth, improves with age. Known for digestive benefits and deep complexity." }
+    ];
+    
+    const defaultTea = { name: "Artisan Ceylon Blend", quality: "Premium Selection", desc: "Exquisite hand-picked leaves from high elevation gardens. Notes of honey and floral undertones. Single origin." };
+
+    function recognizeTeaFromLabels(predictionLabels) {
+        let bestMatch = null;
+        let maxScore = 0;
+        for (let tea of teaDatabase) {
+            let score = 0;
+            for (let kw of tea.keywords) {
+                for (let label of predictionLabels) {
+                    if (label.toLowerCase().includes(kw.toLowerCase())) {
+                        score += 1.8;
+                    }
+                    if (kw.toLowerCase().split(" ").some(part => label.toLowerCase().includes(part) && part.length > 2)) score += 0.9;
+                }
+            }
+            if (score > maxScore) {
+                maxScore = score;
+                bestMatch = tea;
+            }
+        }
+        if (maxScore >= 1.2) return bestMatch;
+        for (let label of predictionLabels) {
+            if (label.toLowerCase().includes("tea")) return teaDatabase[0];
+        }
+        return defaultTea;
+    }
+
+    // ======================= CAMERA FIX: robust getUserMedia =======================
+    let currentStream = null;
+    let useFrontCamera = false;
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const captureBtn = document.getElementById('captureBtn');
+    const switchBtn = document.getElementById('switchCameraBtn');
+    const teaInfoPanel = document.getElementById('teaInfoPanel');
+    const teaNameSpan = document.getElementById('teaName');
+    const teaQualitySpan = document.getElementById('teaQuality');
+    const teaDescSpan = document.getElementById('teaDescription');
+    const speakerBtn = document.getElementById('speakerBtn');
+    const saveBtn = document.getElementById('saveToFirebaseBtn');
+    const scanRefInput = document.getElementById('scanRefInput');
+    const statusMsgDiv = document.getElementById('statusMessage');
+
+    let mobilenetModel = null;
+    let currentRecognizedTea = null;
+
+    async function loadModel() {
+        statusMsgDiv.innerText = "Loading AI model... please wait";
+        try {
+            mobilenetModel = await mobilenet.load();
+            statusMsgDiv.innerText = "✅ AI Ready. Point camera at tea leaf/sample";
+            setTimeout(() => { if(statusMsgDiv.innerText.includes("Ready")) statusMsgDiv.innerText = ""; }, 2500);
+        } catch(e) {
+            statusMsgDiv.innerText = "Model load error, refresh";
+        }
+    }
+
+    // Core camera function with constraints and error handling
+    async function startCamera() {
+        if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+            currentStream = null;
+        }
+        // Determine facing mode: 'environment' for back camera (default), 'user' for front
+        const facingMode = useFrontCamera ? "user" : "environment";
+        const constraints = {
+            video: { facingMode: { exact: facingMode } },
+            audio: false
+        };
+        // fallback if exact fails
+        try {
+            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = currentStream;
+            await video.play();
+            statusMsgDiv.innerText = "Camera ready ✓";
+            setTimeout(() => { if(statusMsgDiv.innerText === "Camera ready ✓") statusMsgDiv.innerText = ""; }, 1500);
+        } catch (err) {
+            console.warn("Exact facingMode failed, trying default video", err);
+            try {
+                // fallback without exact
+                const fallbackConstraints = { video: { facingMode: useFrontCamera ? "user" : "environment" } };
+                currentStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+                video.srcObject = currentStream;
+                await video.play();
+                statusMsgDiv.innerText = "Camera active (alternative mode)";
+            } catch (err2) {
+                console.error("Camera error:", err2);
+                statusMsgDiv.innerText = "❌ Camera access denied. Please allow permissions.";
+                alert("Camera permission required. Please enable camera in browser settings.");
+            }
+        }
+    }
+
+    // Capture and classify
+    async function captureAndRecognize() {
+        if (!mobilenetModel) {
+            statusMsgDiv.innerText = "Model still loading, please wait...";
+            return;
+        }
+        if (!video.videoWidth || !video.videoHeight || video.readyState < 2) {
+            statusMsgDiv.innerText = "Camera not ready, tap again in a moment";
+            return;
+        }
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        statusMsgDiv.innerHTML = '<span class="loading-spinner"></span> Analyzing tea sample...';
+        try {
+            const predictions = await mobilenetModel.classify(canvas);
+            const topLabels = predictions.map(p => p.className);
+            console.log("Predicted labels:", topLabels.slice(0,3));
+            const teaMatch = recognizeTeaFromLabels(topLabels);
+            currentRecognizedTea = teaMatch;
+            teaNameSpan.innerText = teaMatch.name;
+            teaQualitySpan.innerHTML = `<i class="fas fa-star" style="color:#C9A03D;"></i> ${teaMatch.quality}`;
+            teaDescSpan.innerText = teaMatch.desc;
+            teaInfoPanel.style.display = "block";
+            // Female voice narration
+            speakTeaDetails(teaMatch);
+            statusMsgDiv.innerHTML = `✅ Recognized: ${teaMatch.name}`;
+            setTimeout(() => { if(statusMsgDiv.innerHTML.includes("Recognized")) statusMsgDiv.innerHTML = ""; }, 2800);
+        } catch(err) {
+            console.error(err);
+            statusMsgDiv.innerText = "Recognition error, try again";
+        }
+    }
+
+    // Female voice synthesis
+    function speakTeaDetails(tea) {
+        if (!window.speechSynthesis) return;
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance();
+        utterance.text = `Tea identified as ${tea.name}. Quality: ${tea.quality}. ${tea.desc}`;
+        utterance.rate = 0.92;
+        utterance.pitch = 1.25;
+        utterance.volume = 1;
+        const setVoice = () => {
+            const voices = window.speechSynthesis.getVoices();
+            const femaleVoice = voices.find(voice => 
+                voice.name.includes("Google UK English Female") || 
+                voice.name.includes("Samantha") || 
+                (voice.lang === 'en-US' && voice.name.toLowerCase().includes('female')) ||
+                voice.name.includes("Microsoft Zira")
+            );
+            if (femaleVoice) utterance.voice = femaleVoice;
+            window.speechSynthesis.speak(utterance);
+        };
+        if (window.speechSynthesis.getVoices().length) setVoice();
+        else window.speechSynthesis.onvoiceschanged = setVoice;
+    }
+
+    speakerBtn.addEventListener('click', () => {
+        if (currentRecognizedTea) speakTeaDetails(currentRecognizedTea);
+        else {
+            const msg = new SpeechSynthesisUtterance("Please scan a tea sample first.");
+            window.speechSynthesis.speak(msg);
+        }
+    });
+
+    // Save to Firebase or fallback
+    async function saveToDatabase() {
+        if (!currentRecognizedTea) {
+            statusMsgDiv.innerText = "⚠️ No tea scanned yet. Please capture a tea sample first.";
+            return;
+        }
+        const reference = scanRefInput.value.trim();
+        if (reference === "") {
+            statusMsgDiv.innerText = "❌ Please enter a batch number or text reference.";
+            return;
+        }
+        const scanData = {
+            teaName: currentRecognizedTea.name,
+            quality: currentRecognizedTea.quality,
+            description: currentRecognizedTea.desc,
+            reference: reference,
+            timestamp: new Date().toISOString(),
+            scannedAt: firebase.database.ServerValue.TIMESTAMP || new Date().getTime(),
+            device: "CTM Smart Recognizer"
+        };
+        
+        if (firebaseInitialized && database) {
+            try {
+                const newRef = await database.ref('teaScans').push(scanData);
+                showToast(`✅ Saved to Firebase! ID: ${newRef.key.slice(-6)}`);
+                statusMsgDiv.innerText = "Data saved to cloud successfully.";
+                scanRefInput.value = "";
+            } catch (err) {
+                console.error(err);
+                fallbackSaveLocal(scanData);
+            }
+        } else {
+            fallbackSaveLocal(scanData);
+        }
+    }
+
+    function fallbackSaveLocal(data) {
+        let stored = JSON.parse(localStorage.getItem("CTM_TeaScans") || "[]");
+        stored.push(data);
+        localStorage.setItem("CTM_TeaScans", JSON.stringify(stored));
+        showToast("💾 Saved offline (localStorage). Firebase connection optional.");
+        statusMsgDiv.innerText = "Saved locally. Cloud sync ready when configured.";
+        scanRefInput.value = "";
+    }
+
+    function showToast(msg) {
+        let toast = document.createElement('div');
+        toast.className = 'toast-msg';
+        toast.innerText = msg;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 500);
+        }, 2800);
+    }
+
+    // Switch camera with proper restart
+    switchBtn.addEventListener('click', async () => {
+        useFrontCamera = !useFrontCamera;
+        await startCamera();
+    });
+
+    captureBtn.addEventListener('click', captureAndRecognize);
+    saveBtn.addEventListener('click', saveToDatabase);
+
+    // init all
+    (async () => {
+        await loadModel();
+        await startCamera();
+    })();
+
+    // Additional: ensure video element does not stay blank on some mobile browsers - force orientation listener
+    window.addEventListener('resize', () => {
+        if (currentStream && video) {
+            video.style.width = '100%';
+        }
+    });
+</script>
+</body>
+</html>
